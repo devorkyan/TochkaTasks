@@ -7,56 +7,53 @@ TARGET_ROOM_FOR = {'A': 0, 'B': 1, 'C': 2, 'D': 3}
 ROOM_ENTRANCES = (2, 4, 6, 8)
 HALLWAY_STOPS = frozenset({0, 1, 3, 5, 7, 9, 10})
 
+def solve(input_lines: list[str]) -> int:
+    def parse_layout(input_lines: list[str]):
+        hallway = tuple([None] * 11)
+        room_depth = len(input_lines) - 3
+        room_columns = [[line[3 + 2 * i] for line in input_lines[2:-1]] for i in range(4)]
+        return (hallway, tuple(map(tuple, room_columns))), room_depth
 
-def parse_layout(input_lines: list[str]):
-    hallway = tuple([None] * 11)
-    room_depth = len(input_lines) - 3
-    room_columns = [[line[3 + 2 * i] for line in input_lines[2:-1]] for i in range(4)]
-    return (hallway, tuple(map(tuple, room_columns))), room_depth
+    def get_solved_layout(room_depth: int):
+        return (tuple([None] * 11), tuple(tuple([owner] * room_depth) for owner in "ABCD"))
 
+    def get_possible_moves(layout, room_depth):
+        hallway, rooms = layout
+        for hall_pos, mover in enumerate(hallway):
+            if not mover: continue
+            room_idx = TARGET_ROOM_FOR[mover]
+            if any(occupant and occupant != mover for occupant in rooms[room_idx]): continue
+            dest_entrance = ROOM_ENTRANCES[room_idx]
+            start, end = min(hall_pos, dest_entrance), max(hall_pos, dest_entrance)
+            if any(hallway[i] for i in range(start, end + 1) if i != hall_pos): continue
+            dest_depth = next((i for i in range(room_depth - 1, -1, -1) if rooms[room_idx][i] is None), -1)
 
-def get_solved_layout(room_depth: int):
-    return (tuple([None] * 11), tuple(tuple([owner] * room_depth) for owner in "ABCD"))
-
-
-def get_possible_moves(layout, room_depth):
-    hallway, rooms = layout
-    for hall_pos, mover in enumerate(hallway):
-        if not mover: continue
-        room_idx = TARGET_ROOM_FOR[mover]
-        if any(occupant and occupant != mover for occupant in rooms[room_idx]): continue
-        dest_entrance = ROOM_ENTRANCES[room_idx]
-        start, end = min(hall_pos, dest_entrance), max(hall_pos, dest_entrance)
-        if any(hallway[i] for i in range(start, end + 1) if i != hall_pos): continue
-        dest_depth = next((i for i in range(room_depth - 1, -1, -1) if rooms[room_idx][i] is None), -1)
-
-        distance = abs(hall_pos - dest_entrance) + (dest_depth + 1)
-        move_energy = distance * ENERGY_COST[mover]
-
-        new_hallway, new_rooms = list(hallway), [list(r) for r in rooms]
-        new_hallway[hall_pos], new_rooms[room_idx][dest_depth] = None, mover
-        yield move_energy, (tuple(new_hallway), tuple(map(tuple, new_rooms)))
-        return
-
-    for room_idx, room in enumerate(rooms):
-        if all(occupant is None or TARGET_ROOM_FOR.get(occupant) == room_idx for occupant in room): continue
-        source_depth, mover = next(((i, occupant) for i, occupant in enumerate(room) if occupant), (None, None))
-        if mover is None: continue
-
-        source_entrance = ROOM_ENTRANCES[room_idx]
-        for hall_stop in HALLWAY_STOPS:
-            start, end = min(source_entrance, hall_stop), max(source_entrance, hall_stop)
-            if any(hallway[i] for i in range(start, end + 1)): continue
-
-            distance = (source_depth + 1) + abs(hall_stop - source_entrance)
+            distance = abs(hall_pos - dest_entrance) + (dest_depth + 1)
             move_energy = distance * ENERGY_COST[mover]
 
             new_hallway, new_rooms = list(hallway), [list(r) for r in rooms]
-            new_hallway[hall_stop], new_rooms[room_idx][source_depth] = mover, None
+            new_hallway[hall_pos], new_rooms[room_idx][dest_depth] = None, mover
             yield move_energy, (tuple(new_hallway), tuple(map(tuple, new_rooms)))
+            return
+
+        for room_idx, room in enumerate(rooms):
+            if all(occupant is None or TARGET_ROOM_FOR.get(occupant) == room_idx for occupant in room): continue
+            source_depth, mover = next(((i, occupant) for i, occupant in enumerate(room) if occupant), (None, None))
+            if mover is None: continue
+
+            source_entrance = ROOM_ENTRANCES[room_idx]
+            for hall_stop in HALLWAY_STOPS:
+                start, end = min(source_entrance, hall_stop), max(source_entrance, hall_stop)
+                if any(hallway[i] for i in range(start, end + 1)): continue
+
+                distance = (source_depth + 1) + abs(hall_stop - source_entrance)
+                move_energy = distance * ENERGY_COST[mover]
+
+                new_hallway, new_rooms = list(hallway), [list(r) for r in rooms]
+                new_hallway[hall_stop], new_rooms[room_idx][source_depth] = mover, None
+                yield move_energy, (tuple(new_hallway), tuple(map(tuple, new_rooms)))
 
 
-def solve(input_lines: list[str]) -> int:
     initial_layout, room_depth = parse_layout(input_lines)
     target_layout = get_solved_layout(room_depth)
 
@@ -76,11 +73,9 @@ def solve(input_lines: list[str]) -> int:
                 heapq.heappush(queue, (new_energy, next(tie_breaker), next_layout))
     return -1
 
-
 def main():
     input_lines = [line.rstrip('\n') for line in sys.stdin]
     print(solve(input_lines))
-
 
 if __name__ == "__main__":
     main()
