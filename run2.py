@@ -2,104 +2,116 @@ import sys
 from collections import deque, defaultdict
 
 
-def convert_input():
-    graph = defaultdict(list)
-    for line in sys.stdin:
-        try:
-            node1, node2 = line.strip().split('-')
-            graph[node1].append(node2)
-            graph[node2].append(node1)
-        except ValueError:
-            continue
-
-    for node in graph:
-        graph[node].sort()
-    return graph
-
-
-def find_shortest_path_to_gateway(graph, start_node, end_node):
-    queue = deque([(start_node, [start_node])])
-    visited = {start_node}
-
-    while queue:
-        node, path = queue.popleft()
-        if node == end_node:
-            return path
-        for neighbour in graph.get(node, []):
-            if neighbour not in visited:
-                visited.add(neighbour)
-                queue.append((neighbour, path + [neighbour]))
-    return None
-
-
-def find_virus_target_path(graph, virus_pos, gateways):
-    best_path = None
-    for gw in gateways:
-        path = find_shortest_path_to_gateway(graph, virus_pos, gw)
-        if path:
-            if best_path is None or len(path) < len(best_path):
-                best_path = path
-    return best_path
-
-
-def bfs_distances(graph, start_node):
+def _find_distances_via_bfs(graph, start_node):
     distances = {start_node: 0}
     queue = deque([start_node])
+
     while queue:
-        node = queue.popleft()
-        for neighbour in graph.get(node, []):
-            if neighbour not in distances:
-                distances[neighbour] = distances[node] + 1
-                queue.append(neighbour)
+        current_node = queue.popleft()
+        for neighbor in sorted(graph.get(current_node, [])):
+            if neighbor not in distances:
+                distances[neighbor] = distances[current_node] + 1
+                queue.append(neighbor)
     return distances
 
 
-def solve():
+def _determine_virus_target(graph, virus_position, gateways):
+    distances_from_virus = _find_distances_via_bfs(graph, virus_position)
+
+    best_target_gateway = None
+    min_distance_to_gateway = float('inf')
+
+    for gateway in sorted(gateways):
+        if gateway in distances_from_virus:
+            distance = distances_from_virus[gateway]
+            if distance < min_distance_to_gateway:
+                min_distance_to_gateway = distance
+                best_target_gateway = gateway
+
+    return best_target_gateway
+
+
+def _find_critical_link_to_sever(graph, virus_position, target_gateway):
+    distances_from_gateway = _find_distances_via_bfs(graph, target_gateway)
+
+    current_path_node = virus_position
+
+    while target_gateway not in graph[current_path_node]:
+        best_next_hop = None
+        min_dist_to_target = float('inf')
+
+        for neighbor in sorted(graph[current_path_node]):
+            if neighbor in distances_from_gateway and distances_from_gateway[neighbor] < min_dist_to_target:
+                min_dist_to_target = distances_from_gateway[neighbor]
+                best_next_hop = neighbor
+
+        current_path_node = best_next_hop
+
+    return f"{target_gateway}-{current_path_node}"
+
+
+def _calculate_virus_next_position(graph, virus_position, gateways):
+    new_target_gateway = _determine_virus_target(graph, virus_position, gateways)
+
+    if not new_target_gateway:
+        return None
+
+    distances_from_new_gateway = _find_distances_via_bfs(graph, new_target_gateway)
+
+    best_next_hop = None
+    min_dist_to_target = float('inf')
+
+    for neighbor in sorted(graph[virus_position]):
+        if neighbor in distances_from_new_gateway and distances_from_new_gateway[neighbor] < min_dist_to_target:
+            min_dist_to_target = distances_from_new_gateway[neighbor]
+            best_next_hop = neighbor
+
+    return best_next_hop
+
+
+def solve(edges: list[tuple[str, str]]) -> list[str]:
+    graph = defaultdict(list)
+    gateways = set()
+    for node1, node2 in edges:
+        graph[node1].append(node2)
+        graph[node2].append(node1)
+        if node1.isupper(): gateways.add(node1)
+        if node2.isupper(): gateways.add(node2)
+
     virus_position = 'a'
-    graph = convert_input()
-    gateways = sorted([node for node in graph if node.isupper()])
-    closed_gateways = []
+    severed_links = []
 
     while True:
-        distances_from_virus = bfs_distances(graph, virus_position)
+        target_gateway = _determine_virus_target(graph, virus_position, gateways)
 
-        min_dist = float('inf')
-        for gw in gateways:
-            if gw in distances_from_virus:
-                min_dist = min(min_dist, distances_from_virus[gw])
-
-        if min_dist == float('inf'):
+        if target_gateway is None:
             break
 
-        critical_links = []
-        for gw in gateways:
-            if distances_from_virus.get(gw) == min_dist:
-                for neighbour in graph[gw]:
-                    if distances_from_virus.get(neighbour) == min_dist - 1:
-                        critical_links.append(f"{gw}-{neighbour}")
+        link_to_sever = _find_critical_link_to_sever(graph, virus_position, target_gateway)
+        severed_links.append(link_to_sever)
 
-        if not critical_links:
-            break
+        gateway_node, neighbor_node = link_to_sever.split('-')
+        graph[gateway_node].remove(neighbor_node)
+        graph[neighbor_node].remove(gateway_node)
 
-        link_to_sever = min(critical_links)
-        target_gateway, node_to_sever = link_to_sever.split('-')
+        next_pos = _calculate_virus_next_position(graph, virus_position, gateways)
+        if next_pos:
+            virus_position = next_pos
 
-        closed_gateways.append(link_to_sever)
-
-        graph[node_to_sever].remove(target_gateway)
-        graph[target_gateway].remove(node_to_sever)
-
-        next_best_path = find_virus_target_path(graph, virus_position, gateways)
-
-        if next_best_path and len(next_best_path) > 1:
-            virus_position = next_best_path[1]
-
-    return closed_gateways
+    return severed_links
 
 
 def main():
-    result = solve()
-    print('\n'.join(result))
+    edges = []
+    for line in sys.stdin:
+        line = line.strip()
+        if line and '-' in line:
+            node1, node2 = line.split('-')
+            edges.append((node1, node2))
+
+    result = solve(edges)
+    for edge in result:
+        print(edge)
 
 
 if __name__ == "__main__":
