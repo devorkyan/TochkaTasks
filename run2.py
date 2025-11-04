@@ -2,73 +2,6 @@ import sys
 from collections import deque, defaultdict
 
 
-def _find_distances_via_bfs(graph, start_node):
-    distances = {start_node: 0}
-    queue = deque([start_node])
-
-    while queue:
-        current_node = queue.popleft()
-        for neighbor in sorted(graph.get(current_node, [])):
-            if neighbor not in distances:
-                distances[neighbor] = distances[current_node] + 1
-                queue.append(neighbor)
-    return distances
-
-
-def _determine_virus_target(graph, virus_position, gateways):
-    distances_from_virus = _find_distances_via_bfs(graph, virus_position)
-
-    best_target_gateway = None
-    min_distance_to_gateway = float('inf')
-
-    for gateway in sorted(gateways):
-        if gateway in distances_from_virus:
-            distance = distances_from_virus[gateway]
-            if distance < min_distance_to_gateway:
-                min_distance_to_gateway = distance
-                best_target_gateway = gateway
-
-    return best_target_gateway
-
-
-def _find_critical_link_to_sever(graph, virus_position, target_gateway):
-    distances_from_gateway = _find_distances_via_bfs(graph, target_gateway)
-
-    current_path_node = virus_position
-
-    while target_gateway not in graph[current_path_node]:
-        best_next_hop = None
-        min_dist_to_target = float('inf')
-
-        for neighbor in sorted(graph[current_path_node]):
-            if neighbor in distances_from_gateway and distances_from_gateway[neighbor] < min_dist_to_target:
-                min_dist_to_target = distances_from_gateway[neighbor]
-                best_next_hop = neighbor
-
-        current_path_node = best_next_hop
-
-    return f"{target_gateway}-{current_path_node}"
-
-
-def _calculate_virus_next_position(graph, virus_position, gateways):
-    new_target_gateway = _determine_virus_target(graph, virus_position, gateways)
-
-    if not new_target_gateway:
-        return None
-
-    distances_from_new_gateway = _find_distances_via_bfs(graph, new_target_gateway)
-
-    best_next_hop = None
-    min_dist_to_target = float('inf')
-
-    for neighbor in sorted(graph[virus_position]):
-        if neighbor in distances_from_new_gateway and distances_from_new_gateway[neighbor] < min_dist_to_target:
-            min_dist_to_target = distances_from_new_gateway[neighbor]
-            best_next_hop = neighbor
-
-    return best_next_hop
-
-
 def solve(edges: list[tuple[str, str]]) -> list[str]:
     graph = defaultdict(list)
     gateways = set()
@@ -78,25 +11,113 @@ def solve(edges: list[tuple[str, str]]) -> list[str]:
         if node1.isupper(): gateways.add(node1)
         if node2.isupper(): gateways.add(node2)
 
+    for node in graph:
+        graph[node].sort()
+
     virus_position = 'a'
     severed_links = []
 
+    sorted_gateways = sorted(list(gateways))
+
     while True:
-        target_gateway = _determine_virus_target(graph, virus_position, gateways)
+        dist_from_virus = {virus_position: 0}
+        queue = deque([virus_position])
+        head = 0
+        while head < len(queue):
+            u = queue[head];
+            head += 1
+            for v in graph[u]:
+                if v not in dist_from_virus:
+                    dist_from_virus[v] = dist_from_virus[u] + 1
+                    queue.append(v)
+
+        target_gateway = None
+        min_dist = float('inf')
+        for gw in sorted_gateways:
+            dist = dist_from_virus.get(gw, float('inf'))
+            if dist < min_dist:
+                min_dist = dist
+                target_gateway = gw
 
         if target_gateway is None:
             break
 
-        link_to_sever = _find_critical_link_to_sever(graph, virus_position, target_gateway)
-        severed_links.append(link_to_sever)
+        dist_from_target = {target_gateway: 0}
+        queue = deque([target_gateway])
+        head = 0
+        while head < len(queue):
+            u = queue[head];
+            head += 1
+            for v in graph[u]:
+                if v not in dist_from_target:
+                    dist_from_target[v] = dist_from_target[u] + 1
+                    queue.append(v)
 
-        gateway_node, neighbor_node = link_to_sever.split('-')
-        graph[gateway_node].remove(neighbor_node)
-        graph[neighbor_node].remove(gateway_node)
+        node_on_path = virus_position
+        node_to_sever_from = None
+        while True:
+            is_adjacent_to_gateway = False
+            for neighbor in graph[node_on_path]:
+                if neighbor == target_gateway:
+                    is_adjacent_to_gateway = True
+                    break
+            if is_adjacent_to_gateway:
+                node_to_sever_from = node_on_path
+                break
 
-        next_pos = _calculate_virus_next_position(graph, virus_position, gateways)
-        if next_pos:
-            virus_position = next_pos
+            best_next_hop = ""
+            for neighbor in graph[node_on_path]:
+                if dist_from_target.get(neighbor, float('inf')) < dist_from_target[node_on_path]:
+                    best_next_hop = neighbor
+                    break
+            node_on_path = best_next_hop
+
+        link_to_sever_str = f"{target_gateway}-{node_to_sever_from}"
+        severed_links.append(link_to_sever_str)
+        graph[target_gateway].remove(node_to_sever_from)
+        graph[node_to_sever_from].remove(target_gateway)
+
+        dist_from_virus_after_cut = {virus_position: 0}
+        queue = deque([virus_position])
+        head = 0
+        while head < len(queue):
+            u = queue[head];
+            head += 1
+            for v in graph[u]:
+                if v not in dist_from_virus_after_cut:
+                    dist_from_virus_after_cut[v] = dist_from_virus_after_cut[u] + 1
+                    queue.append(v)
+
+        new_target = None
+        min_dist = float('inf')
+        for gw in sorted_gateways:
+            dist = dist_from_virus_after_cut.get(gw, float('inf'))
+            if dist < min_dist:
+                min_dist = dist
+                new_target = gw
+
+        if new_target is None:
+            continue
+
+        dist_from_new_target = {new_target: 0}
+        queue = deque([new_target])
+        head = 0
+        while head < len(queue):
+            u = queue[head];
+            head += 1
+            for v in graph[u]:
+                if v not in dist_from_new_target:
+                    dist_from_new_target[v] = dist_from_new_target[u] + 1
+                    queue.append(v)
+
+        next_virus_pos = ""
+        for neighbor in graph[virus_position]:
+            if dist_from_new_target.get(neighbor, float('inf')) < dist_from_new_target[virus_position]:
+                next_virus_pos = neighbor
+                break
+
+        if next_virus_pos:
+            virus_position = next_virus_pos
 
     return severed_links
 
