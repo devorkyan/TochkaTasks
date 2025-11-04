@@ -20,6 +20,7 @@ def solve(edges: list[tuple[str, str]]) -> list[str]:
     sorted_gateways = sorted(list(gateways))
 
     while True:
+        # --- Ход игрока: найти и отключить коридор (1 BFS) ---
         dist_from_virus = {virus_position: 0}
         queue = deque([virus_position])
         head = 0
@@ -42,41 +43,18 @@ def solve(edges: list[tuple[str, str]]) -> list[str]:
         if target_gateway is None:
             break
 
-        dist_from_target = {target_gateway: 0}
-        queue = deque([target_gateway])
-        head = 0
-        while head < len(queue):
-            u = queue[head];
-            head += 1
-            for v in graph[u]:
-                if v not in dist_from_target:
-                    dist_from_target[v] = dist_from_target[u] + 1
-                    queue.append(v)
-
-        node_on_path = virus_position
-        node_to_sever_from = None
-        while True:
-            is_adjacent_to_gateway = False
-            for neighbor in graph[node_on_path]:
-                if neighbor == target_gateway:
-                    is_adjacent_to_gateway = True
-                    break
-            if is_adjacent_to_gateway:
-                node_to_sever_from = node_on_path
+        node_to_sever_from = ""
+        for neighbor in graph[target_gateway]:
+            if dist_from_virus.get(neighbor) == min_dist - 1:
+                node_to_sever_from = neighbor
                 break
-
-            best_next_hop = ""
-            for neighbor in graph[node_on_path]:
-                if dist_from_target.get(neighbor, float('inf')) < dist_from_target[node_on_path]:
-                    best_next_hop = neighbor
-                    break
-            node_on_path = best_next_hop
 
         link_to_sever_str = f"{target_gateway}-{node_to_sever_from}"
         severed_links.append(link_to_sever_str)
         graph[target_gateway].remove(node_to_sever_from)
         graph[node_to_sever_from].remove(target_gateway)
 
+        # --- Ход вируса: перемещение в измененной сети (2 BFS) ---
         dist_from_virus_after_cut = {virus_position: 0}
         queue = deque([virus_position])
         head = 0
@@ -110,11 +88,13 @@ def solve(edges: list[tuple[str, str]]) -> list[str]:
                     dist_from_new_target[v] = dist_from_new_target[u] + 1
                     queue.append(v)
 
-        next_virus_pos = ""
-        for neighbor in graph[virus_position]:
-            if dist_from_new_target.get(neighbor, float('inf')) < dist_from_new_target[virus_position]:
-                next_virus_pos = neighbor
-                break
+        next_virus_pos = None
+        current_dist_to_target = dist_from_new_target.get(virus_position, float('inf'))
+        if current_dist_to_target != float('inf'):
+            for neighbor in graph[virus_position]:
+                if dist_from_new_target.get(neighbor) == current_dist_to_target - 1:
+                    next_virus_pos = neighbor
+                    break
 
         if next_virus_pos:
             virus_position = next_virus_pos
@@ -124,11 +104,14 @@ def solve(edges: list[tuple[str, str]]) -> list[str]:
 
 def main():
     edges = []
-    for line in sys.stdin:
-        line = line.strip()
-        if line and '-' in line:
-            node1, node2 = line.split('-')
-            edges.append((node1, node2))
+    try:
+        for line in sys.stdin:
+            line = line.strip()
+            if line and '-' in line:
+                node1, node2 = line.split('-')
+                edges.append((node1, node2))
+    except (IOError, BrokenPipeError):
+        pass
 
     result = solve(edges)
     for edge in result:
