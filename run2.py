@@ -22,28 +22,42 @@ def solve(edges):
     virus_pos = 'a'
     result = []
 
-    def bfs_to_find_target_and_path():
+    bfs_cache = {}
+
+    def bfs_from_start(start):
+        if start in bfs_cache:
+            return bfs_cache[start]
+
         distances = {}
         prev = {}
-        queue = deque([virus_pos])
-        distances[virus_pos] = 0
-        prev[virus_pos] = None
+        queue = deque([start])
+        distances[start] = 0
+        prev[start] = None
 
         while queue:
             node = queue.popleft()
-            for neighbor in sorted(graph[node]):
+            for neighbor in graph[node]:
                 if neighbor not in distances:
                     distances[neighbor] = distances[node] + 1
                     prev[neighbor] = node
                     queue.append(neighbor)
 
+        bfs_cache[start] = (distances, prev)
+        return distances, prev
+
+    while True:
+        distances, prev = bfs_from_start(virus_pos)
+
         reachable_gateways = [g for g in gateways if g in distances]
         if not reachable_gateways:
-            return None, None
+            break
 
-        min_dist = min(distances[g] for g in reachable_gateways)
-        candidate_gateways = sorted([g for g in reachable_gateways if distances[g] == min_dist])
-        target_gateway = candidate_gateways[0]
+        min_dist = float('inf')
+        target_gateway = None
+        for gateway in reachable_gateways:
+            if distances[gateway] < min_dist or (distances[gateway] == min_dist and gateway < target_gateway):
+                min_dist = distances[gateway]
+                target_gateway = gateway
 
         path = []
         node = target_gateway
@@ -52,21 +66,13 @@ def solve(edges):
             node = prev[node]
         path.reverse()
 
-        return target_gateway, path
-
-    while True:
-        target_gateway, path = bfs_to_find_target_and_path()
-        if target_gateway is None:
-            break
-
         if len(path) == 2:
             edge_to_cut = f"{target_gateway}-{virus_pos}"
-            if edge_to_cut in graph[target_gateway]:
+            if virus_pos in graph[target_gateway]:
                 graph[target_gateway].remove(virus_pos)
                 graph[virus_pos].remove(target_gateway)
                 result.append(edge_to_cut)
-                break
-            continue
+            break
 
         next_node = path[1]
 
@@ -77,8 +83,8 @@ def solve(edges):
 
         edge_to_cut = None
         for edge in available_edges:
-            gateway, node = edge.split('-')
-            if gateway == target_gateway and node in path:
+            gateway, node_val = edge.split('-')
+            if gateway == target_gateway:
                 edge_to_cut = edge
                 break
 
@@ -86,10 +92,12 @@ def solve(edges):
             edge_to_cut = available_edges[0]
 
         if edge_to_cut:
-            gateway, node = edge_to_cut.split('-')
-            graph[gateway].remove(node)
-            graph[node].remove(gateway)
+            gateway, node_val = edge_to_cut.split('-')
+            graph[gateway].remove(node_val)
+            graph[node_val].remove(gateway)
             result.append(edge_to_cut)
+            # Инвалидируем кэш
+            bfs_cache.clear()
 
         virus_pos = next_node
 
