@@ -5,7 +5,6 @@ from collections import deque
 def solve(edges):
     graph = {}
     gateways = set()
-    regular_nodes = set()
 
     for node1, node2 in edges:
         if node1 not in graph:
@@ -17,96 +16,111 @@ def solve(edges):
 
         if node1.isupper():
             gateways.add(node1)
-            regular_nodes.add(node2)
-        elif node2.isupper():
+        if node2.isupper():
             gateways.add(node2)
-            regular_nodes.add(node1)
-        else:
-            regular_nodes.add(node1)
-            regular_nodes.add(node2)
 
     virus_position = 'a'
     result = []
 
-    def find_target_gateway_and_path(current_pos):
+    def bfs_distances(start):
         distances = {}
-        previous = {}
-        queue = deque([current_pos])
-        distances[current_pos] = 0
-        previous[current_pos] = None
+        queue = deque([start])
+        distances[start] = 0
 
         while queue:
             node = queue.popleft()
             for neighbor in graph[node]:
                 if neighbor not in distances:
                     distances[neighbor] = distances[node] + 1
-                    previous[neighbor] = node
                     queue.append(neighbor)
+        return distances
+
+    def find_next_move(current_pos):
+        distances = bfs_distances(current_pos)
 
         reachable_gateways = [g for g in gateways if g in distances]
         if not reachable_gateways:
-            return None, None
+            return None
 
-        closest_distance = min(distances[g] for g in reachable_gateways)
-        candidate_gateways = [g for g in reachable_gateways if distances[g] == closest_distance]
+        min_dist = min(distances[g] for g in reachable_gateways)
+        candidate_gateways = [g for g in reachable_gateways if distances[g] == min_dist]
         target_gateway = min(candidate_gateways)
 
+        queue = deque([current_pos])
+        visited = {current_pos}
+        prev = {current_pos: None}
+
+        while queue:
+            node = queue.popleft()
+            if node == target_gateway:
+                break
+            neighbors = sorted(graph[node])
+            for neighbor in neighbors:
+                if neighbor not in visited:
+                    visited.add(neighbor)
+                    prev[neighbor] = node
+                    queue.append(neighbor)
+
         path = []
-        current = target_gateway
-        while current != current_pos:
-            path.append(current)
-            current = previous[current]
-        path.append(current_pos)
+        node = target_gateway
+        while node is not None:
+            path.append(node)
+            node = prev[node]
         path.reverse()
 
-        return target_gateway, path
+        return path[1] if len(path) > 1 else None
 
-    def get_available_gate_edges():
-        gate_edges = []
-        for gateway in gateways:
-            for neighbor in graph[gateway]:
-                if neighbor in regular_nodes:
-                    gate_edges.append(f"{gateway}-{neighbor}")
-        return sorted(gate_edges)
+    def get_critical_edge(target_gateway, virus_path):
+        gateway_edges = []
+        for gateway in sorted(gateways):
+            for neighbor in sorted(graph[gateway]):
+                gateway_edges.append(f"{gateway}-{neighbor}")
+
+        for edge in gateway_edges:
+            gateway, node = edge.split('-')
+            if gateway == target_gateway and node in virus_path:
+                return edge
+
+        return gateway_edges[0] if gateway_edges else None
 
     while True:
-        target_gateway, path = find_target_gateway_and_path(virus_position)
-        if target_gateway is None:
+        next_node = find_next_move(virus_position)
+        if next_node is None:
             break
 
-        if len(path) == 2:
-            edge_to_cut = f"{target_gateway}-{virus_position}"
-            if edge_to_cut in graph[target_gateway] and edge_to_cut in graph[virus_position]:
-                graph[target_gateway].remove(virus_position)
-                graph[virus_position].remove(target_gateway)
-                result.append(edge_to_cut)
-            continue
-
-        next_node = path[1]
-
-        available_edges = get_available_gate_edges()
-
-        edge_found = False
-        for edge in available_edges:
-            gateway, node = edge.split('-')
-            if gateway == target_gateway and node in path:
-                graph[gateway].remove(node)
-                graph[node].remove(gateway)
-                result.append(edge)
-                edge_found = True
-                break
-
-        if not edge_found:
-            for edge in available_edges:
-                gateway, node = edge.split('-')
-                graph[gateway].remove(node)
-                graph[node].remove(gateway)
-                result.append(edge)
-                edge_found = True
-                break
-
-        if not edge_found:
+        distances = bfs_distances(virus_position)
+        reachable_gateways = [g for g in gateways if g in distances]
+        if not reachable_gateways:
             break
+
+        min_dist = min(distances[g] for g in reachable_gateways)
+        candidate_gateways = [g for g in reachable_gateways if distances[g] == min_dist]
+        target_gateway = min(candidate_gateways)
+
+        virus_path = []
+        current = virus_position
+        while current != target_gateway:
+            virus_path.append(current)
+            next_candidates = []
+            for neighbor in graph[current]:
+                if neighbor not in virus_path:
+                    neighbor_dist = bfs_distances(neighbor)
+                    if target_gateway in neighbor_dist and neighbor_dist[target_gateway] == distances[target_gateway] - \
+                            distances[current]:
+                        next_candidates.append(neighbor)
+            if not next_candidates:
+                break
+            current = min(next_candidates)
+        virus_path.append(target_gateway)
+
+        edge_to_cut = get_critical_edge(target_gateway, virus_path)
+        if edge_to_cut is None:
+            break
+
+        gateway, node = edge_to_cut.split('-')
+        graph[gateway].remove(node)
+        graph[node].remove(gateway)
+        result.append(edge_to_cut)
 
         virus_position = next_node
 
