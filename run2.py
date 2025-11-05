@@ -22,7 +22,7 @@ def solve(edges):
     virus_pos = 'a'
     result = []
 
-    def bfs_from_virus():
+    def find_target_and_next_move():
         distances = {}
         prev = {}
         queue = deque([virus_pos])
@@ -36,14 +36,10 @@ def solve(edges):
                     distances[neighbor] = distances[node] + 1
                     prev[neighbor] = node
                     queue.append(neighbor)
-        return distances, prev
-
-    while True:
-        distances, prev = bfs_from_virus()
 
         reachable_gateways = [g for g in gateways if g in distances]
         if not reachable_gateways:
-            break
+            return None, None
 
         min_dist = min(distances[g] for g in reachable_gateways)
         candidate_gateways = [g for g in reachable_gateways if distances[g] == min_dist]
@@ -56,7 +52,12 @@ def solve(edges):
             node = prev[node]
         path.reverse()
 
-        next_node = path[1] if len(path) > 1 else None
+        return target_gateway, path[1] if len(path) > 1 else None
+
+    while True:
+        target_gateway, next_move = find_target_and_next_move()
+        if target_gateway is None:
+            break
 
         available_edges = []
         for gateway in sorted(gateways):
@@ -66,12 +67,12 @@ def solve(edges):
         edge_to_cut = None
         for edge in available_edges:
             gateway, node = edge.split('-')
-            if gateway == target_gateway and node in path:
+            if gateway == target_gateway:
                 edge_to_cut = edge
                 break
 
-        if edge_to_cut is None:
-            edge_to_cut = available_edges[0] if available_edges else None
+        if edge_to_cut is None and available_edges:
+            edge_to_cut = available_edges[0]
 
         if edge_to_cut:
             gateway, node = edge_to_cut.split('-')
@@ -79,8 +80,8 @@ def solve(edges):
             graph[node].remove(gateway)
             result.append(edge_to_cut)
 
-        if next_node:
-            virus_pos = next_node
+        if next_move:
+            virus_pos = next_move
         else:
             break
 
