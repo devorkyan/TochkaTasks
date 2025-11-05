@@ -22,12 +22,12 @@ def solve(edges):
     virus_pos = 'a'
     result = []
 
-    def find_target_gateway_and_move(current_pos):
+    def bfs_from_virus():
         distances = {}
         prev = {}
-        queue = deque([current_pos])
-        distances[current_pos] = 0
-        prev[current_pos] = None
+        queue = deque([virus_pos])
+        distances[virus_pos] = 0
+        prev[virus_pos] = None
 
         while queue:
             node = queue.popleft()
@@ -36,10 +36,14 @@ def solve(edges):
                     distances[neighbor] = distances[node] + 1
                     prev[neighbor] = node
                     queue.append(neighbor)
+        return distances, prev
+
+    while True:
+        distances, prev = bfs_from_virus()
 
         reachable_gateways = [g for g in gateways if g in distances]
         if not reachable_gateways:
-            return None, None
+            break
 
         min_dist = min(distances[g] for g in reachable_gateways)
         candidate_gateways = [g for g in reachable_gateways if distances[g] == min_dist]
@@ -52,12 +56,7 @@ def solve(edges):
             node = prev[node]
         path.reverse()
 
-        return target_gateway, path[1]
-
-    while True:
-        target_gateway, next_move = find_target_gateway_and_move(virus_pos)
-        if target_gateway is None:
-            break
+        next_node = path[1] if len(path) > 1 else None
 
         available_edges = []
         for gateway in sorted(gateways):
@@ -67,7 +66,7 @@ def solve(edges):
         edge_to_cut = None
         for edge in available_edges:
             gateway, node = edge.split('-')
-            if gateway == target_gateway:
+            if gateway == target_gateway and node in path:
                 edge_to_cut = edge
                 break
 
@@ -80,8 +79,10 @@ def solve(edges):
             graph[node].remove(gateway)
             result.append(edge_to_cut)
 
-        if next_move:
-            virus_pos = next_move
+        if next_node:
+            virus_pos = next_node
+        else:
+            break
 
     return result
 
